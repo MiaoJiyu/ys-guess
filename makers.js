@@ -42,6 +42,7 @@
           <label>账号<input id="authUsername" autocomplete="username" placeholder="3-24 位字母、数字、下划线或汉字"></label>
           <label>昵称<input id="authNickname" maxlength="8" placeholder="游戏内显示名称（注册时填写）"></label>
           <label>密码<input id="authPassword" type="password" autocomplete="current-password" placeholder="至少 6 位"></label>
+          <label id="authAdminCodeLabel">管理员邀请码（选填）<input id="authAdminCode" type="password" autocomplete="off" placeholder="仅首个管理员账号需要，普通注册可留空"></label>
           <div class="form-error" id="authError">${esc(message || '')}</div>
           <div class="modal-actions"><button class="btn btn-gold" id="authSubmit">登录</button></div>
         </div>
@@ -50,12 +51,15 @@
     );
     let mode = 'login';
     const nicknameLabel = $('authNickname').closest('label');
+    const adminCodeLabel = $('authAdminCodeLabel');
     nicknameLabel.style.display = 'none';
+    adminCodeLabel.style.display = 'none';
     document.querySelectorAll('[data-auth]').forEach((tab) => {
       tab.onclick = () => {
         mode = tab.dataset.auth;
         document.querySelectorAll('[data-auth]').forEach((t) => t.classList.toggle('active', t === tab));
         nicknameLabel.style.display = mode === 'register' ? '' : 'none';
+        adminCodeLabel.style.display = mode === 'register' ? '' : 'none';
         $('authSubmit').textContent = mode === 'register' ? '注册并进入' : '登录';
       };
     });
@@ -68,6 +72,7 @@
         username: $('authUsername').value.trim(),
         password: $('authPassword').value,
         nickname: $('authNickname').value.trim(),
+        adminCode: $('authAdminCode').value.trim(),
       };
       try {
         const { response, data } = await api(`/api/auth/${mode === 'login' ? 'login' : 'register'}`, {

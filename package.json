@@ -13,7 +13,7 @@
     "gen:characters": "node scripts/gen-characters.mjs",
     "package": "npm run build && node scripts/package.mjs",
     "check": "node scripts/check-inline.mjs && node --check server.js && node --check makers.js",
-    "test": "npm run build && node scripts/smoke-test.mjs && node scripts/blob-smoke.mjs && node scripts/focus-test.mjs && node scripts/feedback-test.mjs && node scripts/security-test.mjs && node scripts/cheat-test.mjs"
+    "test": "npm run build && node scripts/smoke-test.mjs && node scripts/blob-smoke.mjs && node scripts/focus-test.mjs && node scripts/feedback-test.mjs && node scripts/security-test.mjs && node scripts/cheat-test.mjs && node scripts/invite-test.mjs"
   },
   "engines": {
     "node": ">=20"

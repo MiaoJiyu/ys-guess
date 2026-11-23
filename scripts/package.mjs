@@ -40,7 +40,7 @@ uploadPackage.scripts = {
 delete uploadPackage.devDependencies;
 fs.writeFileSync(uploadPackagePath, JSON.stringify(uploadPackage, null, 2) + '\n', 'utf8');
 
-const buildCheck = spawnSync('npm', ['run', 'build'], {
+const buildCheck = spawnSync('npm run build', {
   cwd: stage,
   stdio: 'inherit',
   shell: true,
