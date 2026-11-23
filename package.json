@@ -1,0 +1,24 @@
+{
+  "name": "teyvat-element-guess-makers",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "description": "提瓦特元素猜谜 - 腾讯云 EdgeOne Makers Node.js 版",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "build": "node scripts/build.mjs",
+    "deploy": "edgeone makers deploy",
+    "sync:env": "node scripts/sync-tencent-env.mjs",
+    "gen:characters": "node scripts/gen-characters.mjs",
+    "package": "npm run build && node scripts/package.mjs",
+    "check": "node scripts/check-inline.mjs && node --check server.js && node --check makers.js",
+    "test": "npm run build && node scripts/smoke-test.mjs && node scripts/blob-smoke.mjs && node scripts/focus-test.mjs && node scripts/feedback-test.mjs && node scripts/security-test.mjs && node scripts/cheat-test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@edgeone/pages-blob": "0.0.19"
+  }
+}

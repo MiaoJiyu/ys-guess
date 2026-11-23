@@ -1,0 +1,30 @@
+{
+  "name": "teyvat-element-guess",
+  "nodeVersion": "22.11.0",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "outputDirectory": "./dist",
+  "cloudFunctions": {
+    "nodejs": {
+      "includeFiles": [
+        "shared/**",
+        "cloud-functions/**",
+        "!tencent_api.env",
+        "!data/**",
+        "!scripts/**",
+        "!server.py",
+        "!server.js",
+        "!players.json"
+      ],
+      "maxDuration": 60
+    }
+  },
+  "headers": [
+    {
+      "source": "/tencent_api.env",
+      "headers": [
+        { "key": "X-Frame-Options", "value": "DENY" }
+      ]
+    }
+  ]
+}
