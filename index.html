@@ -731,6 +731,13 @@
   .answer-sigil { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); width: 150px; height: 150px; color: var(--el, var(--gold)); opacity: .13; pointer-events: none; }
   .answer-sigil svg { width: 100%; height: 100%; }
   .answer-avatar { width: 58px; height: 58px; flex: 0 0 auto; }
+  .answer-avatar-wrap { position: relative; width: 58px; height: 58px; flex: 0 0 auto; }
+  .answer-avatar-wrap .answer-avatar { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .answer-avatar-img {
+    position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%;
+    object-fit: cover; background: rgba(8,11,22,.6); border: 1px solid rgba(233,211,161,.35);
+    z-index: 1;
+  }
   .answer-copy { min-width: 0; position: relative; z-index: 1; }
   .answer-copy .a-kicker { font-size: 9px; letter-spacing: 2px; color: var(--el, var(--gold-2)); }
   .answer-copy h3 { margin: 3px 0 4px; font-family: var(--serif); font-size: 28px; letter-spacing: 3px; color: #fff5df; }
@@ -1218,6 +1225,18 @@
         <div id="lanRooms" class="room-grid hidden"></div>
       </div>
 
+      <div class="download-card glass hidden" id="lanDownloadCard">
+        <div class="download-copy">
+          <div class="eyebrow">LAN HOST PACKAGE</div>
+          <h3>下载局域网一键启动包</h3>
+          <p>包含本地服务、启动器和完整游戏页面。适用于想在自己电脑上开房间的房主，或需要备份局域网服务的玩家。其他玩家无需下载，直接用浏览器访问当前地址即可加入。</p>
+          <div class="download-meta" id="lanDownloadMeta">GitHub Release 最新版 · 经 gh-proxy 加速下载 · ZIP 解压后双击启动</div>
+        </div>
+        <a class="btn btn-gold download-btn" id="lanDownloadLink" href="https://gh-proxy.com/https://github.com/MiaoJiyu/ys-guess/releases/latest/download/teyvat-lan-host.zip" rel="noopener">
+          下载启动包 <span>↓</span>
+        </a>
+      </div>
+
       <div class="hub-foot glass">
         <div><b>公网模式</b><span>由 EdgeOne Makers 提供，账号登录后创建或加入，必须输入 6 位房间号与房间密码。</span></div>
         <div><b>局域网模式</b><span>在本机运行 <code>npm start</code>，同一局域网打开 <code>http://本机IP:8787</code> 即可自动发现并免密进入。</span></div>
@@ -1571,7 +1590,7 @@ const state = {
   ws: null, myId: null, room: null, chars: [], charMap: new Map(),
   welcome: {}, emotes: {}, pools: [],
   leaderboard: [], myName: "",
-  token: "", user: null, sessionId: "", rooms: [], lanRooms: [],
+  token: "", user: null, sessionId: "", rooms: [], lanRooms: [], lanDownload: null,
   eventCursor: 0, polling: null, hubTimer: null, hubTab: "public",
   activeLetter: null, query: "",
   myGuessed: new Set(), myHints: [], hintRound: null, currentCols: ALL_COLS,
@@ -2633,7 +2652,10 @@ function answerCardHTML(target) {
   return `
     <div class="answer-card" style="${elementStyle(target.element)}">
       <div class="answer-sigil">${sigil(target.element)}</div>
-      <div class="avatar answer-avatar" style="--av:${el.color};font-family:var(--serif);font-size:27px;">${esc(target.name.charAt(0))}</div>
+      <div class="answer-avatar-wrap">
+        <div class="avatar answer-avatar" style="--av:${el.color};font-family:var(--serif);font-size:27px;">${esc(target.name.charAt(0))}</div>
+        ${target.avatar ? `<img class="answer-avatar-img" src="${esc(target.avatar)}" alt="${esc(target.name)}" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : ""}
+      </div>
       <div class="answer-copy">
         <div class="a-kicker">THE ANSWER · 命运揭晓</div>
         <h3>${esc(target.name)}</h3>
@@ -3213,10 +3235,22 @@ $("rematchBtn").onclick = () => {
   $("rematchBtn").disabled = true;
   sendMsg({ type: "rematch" });
 };
-$("hintBtn").onclick = () => {
-  if ($("hintBtn").disabled) return;
-  sendMsg({ type: "hint" });
+let hintBusy = false;
+$("hintBtn").onclick = async () => {
+  const btn = $("hintBtn");
+  if (hintBusy || btn.disabled) return;
+  hintBusy = true;
+  btn.disabled = true;
+  btn.innerHTML = "窥探中…";
   sfx.click();
+  try {
+    await sendMsg({ type: "hint" });
+  } finally {
+    setTimeout(() => {
+      hintBusy = false;
+      renderHints();
+    }, 800);
+  }
 };
 
 document.addEventListener("click", e => {

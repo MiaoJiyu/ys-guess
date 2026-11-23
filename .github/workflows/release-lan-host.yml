@@ -1,0 +1,38 @@
+name: Release LAN Host Package
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build LAN host package
+        run: node scripts/package-lan.mjs
+
+      - name: Publish Latest Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'lan-host-latest' }}
+          name: 提瓦特局域网一键启动包
+          body: |
+            局域网房主一键启动包。
+
+            下载后解压，Windows 双击 `一键启动.bat`；macOS / Linux 运行 `bash start.sh`。
+          files: release/teyvat-lan-host.zip
+          make_latest: true
+          generate_release_notes: false

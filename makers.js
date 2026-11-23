@@ -5,6 +5,7 @@
 
   const TOKEN_KEY = 'teyvat_token';
   const SID_KEY = 'teyvat_session_id';
+  const LAN_HOST_DOWNLOAD_URL = 'https://gh-proxy.com/https://github.com/MiaoJiyu/ys-guess/releases/latest/download/teyvat-lan-host.zip';
 
   function token() { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; } }
   function setToken(value) { try { value ? localStorage.setItem(TOKEN_KEY, value) : localStorage.removeItem(TOKEN_KEY); } catch {} state.token = value || ''; }
@@ -183,6 +184,15 @@
       : '<div class="room-empty"><b>未发现局域网房间</b>请在同一局域网运行 <code>npm start</code>，再点击刷新大厅。</div>';
     bindRoomCards(publicRoot, 'public');
     bindRoomCards(lanRoot, 'lan');
+    const downloadCard = $('lanDownloadCard');
+    if (downloadCard) {
+      const show = state.hubTab === 'lan';
+      downloadCard.classList.toggle('hidden', !show);
+      if (show) {
+        $('lanDownloadLink').href = LAN_HOST_DOWNLOAD_URL;
+        $('lanDownloadMeta').textContent = 'GitHub Release 最新版 · 经 gh-proxy 加速下载 · ZIP 解压后双击启动';
+      }
+    }
   }
 
   async function loadRooms() {
@@ -202,6 +212,7 @@
         }
       }
       state.lanRooms = rooms;
+      state.lanDownload = data.download || null;
       window.dispatchEvent(new CustomEvent('teyvat-lan-rooms', { detail: rooms }));
     } catch { /* 云端部署下没有本地广播，静默忽略 */ }
     renderHubRooms();
@@ -802,6 +813,7 @@
         document.querySelectorAll('.hub-tab[data-tab]').forEach((item) => item.classList.toggle('active', item === tab));
         $('publicRooms').classList.toggle('hidden', state.hubTab !== 'public');
         $('lanRooms').classList.toggle('hidden', state.hubTab !== 'lan');
+        renderHubRooms();
       };
     });
   }

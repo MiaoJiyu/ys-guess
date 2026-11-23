@@ -1,6 +1,9 @@
 node_modules/
 dist/
 data/
+logs/
+release/lan-test/
+.runtime/
 .env
 .env.*
 tencent_api.env

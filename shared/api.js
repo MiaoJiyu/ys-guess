@@ -230,7 +230,11 @@ export async function handleApi(context) {
     const roomSummaries = (await listRooms(store))
       .filter((room) => room.visibility === 'lan')
       .map((room) => ({ ...roomSummary(room), lanToken: room.lanToken }));
-    return json({ ok: true, rooms: roomSummaries, peers: discovered, note: discovered.length || roomSummaries.length ? '' : '请在局域网模式下启动本地 Node.js 服务后再发现房间' });
+    return json({
+      ok: true, rooms: roomSummaries, peers: discovered,
+      download: env.__lanDownload || null,
+      note: discovered.length || roomSummaries.length ? '' : '请在局域网模式下启动本地 Node.js 服务后再发现房间',
+    });
   }
 
   if (path.startsWith('/api/admin/')) {

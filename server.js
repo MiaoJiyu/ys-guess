@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import dgram from 'node:dgram';
 import crypto from 'node:crypto';
+import os from 'node:os';
+import net from 'node:net';
 import { handleApi } from './shared/api.js';
 import { appendEvent, createStore } from './shared/store.js';
 import { performAction, roomPayload } from './shared/engine.js';
@@ -12,9 +14,50 @@ import { credentialStatus, credentialsFromEnv } from './shared/tencent.js';
 import { SERVER_VERSION } from './shared/constants.js';
 
 const root = import.meta.dirname;
+const logsDir = path.join(root, 'logs');
+fs.mkdirSync(logsDir, { recursive: true });
+const logFile = path.join(logsDir, 'lan-server.log');
+
+function logLine(level, message) {
+  const line = `[${new Date().toISOString()}] [${level}] ${message}`;
+  console.log(line);
+  try { fs.appendFileSync(logFile, line + '\n', 'utf8'); } catch { /* 日志不可写时不影响主服务 */ }
+}
+
+function getLanAddresses() {
+  const addresses = [];
+  for (const entries of Object.values(os.networkInterfaces())) {
+    for (const entry of entries || []) {
+      if (entry.family === 'IPv4' && !entry.internal) addresses.push(entry.address);
+    }
+  }
+  return [...new Set(addresses)];
+}
+
+async function isPortFree(port) {
+  return new Promise((resolve) => {
+    const probe = net.createServer();
+    probe.once('error', () => resolve(false));
+    probe.once('listening', () => probe.close(() => resolve(true)));
+    probe.listen(port, '0.0.0.0');
+  });
+}
+
+async function pickPort(start) {
+  for (let port = start; port < start + 20; port += 1) {
+    if (await isPortFree(port)) return port;
+  }
+  throw new Error(`端口 ${start}-${start + 19} 均被占用，请关闭占用程序后重试`);
+}
+
 const dataDir = process.env.TEYVAT_DATA_DIR || path.join(root, 'data');
 const kvFile = path.join(dataDir, 'local-kv.json');
-fs.mkdirSync(dataDir, { recursive: true });
+try {
+  fs.mkdirSync(dataDir, { recursive: true });
+} catch (error) {
+  logLine('ERROR', `无法创建数据目录 ${dataDir}: ${error.message}`);
+  process.exit(1);
+}
 
 function readTencentEnv() {
   const file = path.join(root, 'tencent_api.env');
@@ -62,8 +105,7 @@ const binding = {
 env.__store = createStore({ __storeBinding: binding });
 
 const store = env.__store;
-const port = Number(process.argv[2] || process.env.PORT || 8787);
-const lanPort = port;
+let lanPort = Number(process.argv[2] || process.env.PORT || 8787);
 
 async function seedLegacy() {
   const file = path.join(root, 'players.json');
@@ -98,6 +140,9 @@ const mime = {
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
 };
 
 async function webRequest(req) {
@@ -173,6 +218,38 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ ok: false, error: error.message }));
     }
+    return;
+  }
+  if (url.pathname === '/download/teyvat-lan-host.zip') {
+    const download = getLanDownload();
+    if (!download) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('启动包尚未生成，请联系房主。');
+      return;
+    }
+    res.writeHead(200, {
+      'Content-Type': 'application/zip',
+      'Content-Disposition': 'attachment; filename="teyvat-lan-host.zip"',
+      'Content-Length': String(download.size),
+      'Cache-Control': 'no-store',
+    });
+    fs.createReadStream(download.path).pipe(res);
+    return;
+  }
+  if (url.pathname.startsWith('/assets/')) {
+    const assetsRoot = path.resolve(root, 'assets');
+    const file = path.resolve(root, `.${decodeURIComponent(url.pathname)}`);
+    if (!file.startsWith(assetsRoot + path.sep) || !fs.existsSync(file)) {
+      res.writeHead(404);
+      res.end('Asset not found');
+      return;
+    }
+    const content = fs.readFileSync(file);
+    res.writeHead(200, {
+      'Content-Type': mime[path.extname(file)] || 'application/octet-stream',
+      'Cache-Control': 'public, max-age=86400',
+    });
+    res.end(content);
     return;
   }
   if (url.pathname === '/favicon.ico') { res.writeHead(204); res.end(); return; }
@@ -325,23 +402,93 @@ server.on('upgrade', (request, socket, head) => {
   handleWsConnection(socket, request, head).catch(() => socket.destroy());
 });
 
+function getLanDownload() {
+  const candidates = [
+    path.join(root, 'download', 'teyvat-lan-host.zip'),
+    path.join(root, 'release', 'teyvat-lan-host.zip'),
+  ];
+  for (const file of candidates) {
+    if (!fs.existsSync(file)) continue;
+    return {
+      url: '/download/teyvat-lan-host.zip',
+      filename: 'teyvat-lan-host.zip',
+      path: file,
+      size: fs.statSync(file).size,
+    };
+  }
+  return null;
+}
+
+let shuttingDown = false;
+function shutdown(reason) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  clearTimeout(persistTimer);
+  try {
+    fs.writeFileSync(kvFile, JSON.stringify(Object.fromEntries(memory), null, 2), 'utf8');
+    logLine('INFO', `收到 ${reason}，本地数据已保存`);
+  } catch (error) {
+    logLine('ERROR', `退出时保存数据失败：${error.message}`);
+  }
+  process.exit(0);
+}
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('uncaughtException', (error) => {
+  logLine('ERROR', `未捕获异常：${error.stack || error.message}`);
+});
+process.on('unhandledRejection', (error) => {
+  logLine('ERROR', `未处理 Promise 异常：${error?.stack || error}`);
+});
+
 try {
   udp.bind(41234, () => {
     lanReady = true;
     udp.setBroadcast(true);
+    logLine('INFO', 'UDP 局域网发现已启动，端口 41234');
   });
+  udp.on('error', (error) => logLine('WARN', `UDP 局域网发现不可用：${error.message}`));
 } catch (error) {
-  console.warn(`[lan] UDP 初始化失败：${error.message}`);
+  logLine('WARN', `UDP 初始化失败：${error.message}`);
+}
+
+const explicitPort = process.argv[2] || process.env.PORT;
+const requestedPort = Number(explicitPort || 8787);
+const actualPort = explicitPort ? requestedPort : await pickPort(requestedPort);
+lanPort = actualPort;
+const credentials = credentialStatus(env);
+const download = getLanDownload();
+if (download) {
+  env.__lanDownload = {
+    url: download.url,
+    filename: download.filename,
+    size: download.size,
+  };
 }
 
 await seedLegacy();
-server.listen(port, '0.0.0.0', () => {
-  const status = credentialStatus(env);
-  console.log('='.repeat(64));
-  console.log(`提瓦特 · 元素猜谜 · Node.js 联机服务 ${SERVER_VERSION} 已启动`);
-  console.log(`本地访问：http://localhost:${port}`);
-  console.log(`局域网访问：http://<本机IP>:${port}（UDP 发现端口 41234）`);
-  console.log(`腾讯云密钥：${status.configured ? '已读取（值未输出）' : '未配置'}`);
-  console.log('按 Ctrl+C 停止');
-  console.log('='.repeat(64));
+await new Promise((resolve, reject) => {
+  server.once('error', reject);
+  server.listen(actualPort, '0.0.0.0', resolve);
+}).catch((error) => {
+  logLine('ERROR', `服务启动失败：${error.message}`);
+  process.exit(1);
 });
+
+const lanAddresses = getLanAddresses();
+logLine('INFO', '='.repeat(64));
+logLine('INFO', `提瓦特 · 元素猜谜 · Node.js 联机服务 ${SERVER_VERSION} 已启动`);
+logLine('INFO', `Node.js ${process.version} · ${os.type()} ${os.release()}`);
+logLine('INFO', `本地访问：http://localhost:${actualPort}`);
+if (lanAddresses.length) {
+  for (const address of lanAddresses) logLine('INFO', `局域网访问：http://${address}:${actualPort}`);
+} else {
+  logLine('WARN', `未检测到局域网 IPv4 地址，请使用 http://<本机IP>:${actualPort}`);
+}
+logLine('INFO', `数据文件：${kvFile}`);
+logLine('INFO', `日志文件：${logFile}`);
+logLine('INFO', `腾讯云密钥：${credentials.configured ? '已读取（值未输出）' : '未配置'}`);
+logLine('INFO', download ? `启动包下载：${download.url}` : '启动包下载：未找到 teyvat-lan-host.zip');
+logLine('INFO', '按 Ctrl+C 停止');
+logLine('INFO', '='.repeat(64));

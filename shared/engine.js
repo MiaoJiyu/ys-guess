@@ -1,4 +1,5 @@
 import { CHARACTERS } from './characters.js';
+import { avatarIconUrl } from './avatars.js';
 import {
   ALL_COLS, CHEAT_LOCK_SECONDS, CHEAT_MAX_ATTEMPTS, CHEAT_REVEAL_RATE,
   COL_LABELS, EMOTES, FOCUS_DEDUPE_MS, FOCUS_GRACE_SECONDS, FOCUS_LOSS_LIMIT,
@@ -12,9 +13,39 @@ import { applyRatingChange, getLeaderboard, recordMatchStats, titleFor } from '.
 
 const MAX_GUESSES_LIMIT = CHARACTERS.length;
 
+for (const character of CHARACTERS) {
+  character.avatar = avatarIconUrl(character.name);
+}
+
 export function poolCharacters(pool) {
   if (!pool || pool === '全部' || !POOLS.includes(pool)) return CHARACTERS;
   return CHARACTERS.filter((c) => c.region === pool);
+}
+
+function shuffle(list) {
+  const result = [...list];
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+export function pickTarget(room) {
+  const pool = poolCharacters(room.pool);
+  const names = new Set(pool.map((character) => character.name));
+  let bag = (room.targetBag || []).filter((name) => names.has(name));
+  const last = (room.recentTargets || []).at(-1);
+  if (!bag.length) {
+    bag = shuffle(pool.map((character) => character.name));
+    if (bag.length > 1 && bag[0] === last) {
+      const swapIndex = 1 + Math.floor(Math.random() * (bag.length - 1));
+      [bag[0], bag[swapIndex]] = [bag[swapIndex], bag[0]];
+    }
+  }
+  const name = bag.shift();
+  room.targetBag = bag;
+  return pool.find((character) => character.name === name) || pool[0];
 }
 
 function chooseModifier() {
@@ -103,6 +134,8 @@ export function calculateRatingDeltas(players) {
   }
   const ranked = [...players].sort((a, b) => b.wins - a.wins || b.totalScore - a.totalScore);
   const rankMap = new Map(ranked.map((p, index) => [p.id, index]));
+  const maxScore = Math.max(1, ...players.map((p) => Number(p.totalScore) || 0));
+  const maxWins = Math.max(1, ...players.map((p) => Number(p.wins) || 0));
   const deltas = {};
   for (const p of players) {
     let sum = 0;
@@ -112,7 +145,10 @@ export function calculateRatingDeltas(players) {
       const actual = rankMap.get(p.id) < rankMap.get(other.id) ? 1 : rankMap.get(p.id) > rankMap.get(other.id) ? 0 : 0.5;
       sum += actual - expected;
     }
-    deltas[p.id] = Math.round((K_FACTOR * sum) / (players.length - 1));
+    const scoreShare = (Number(p.totalScore) || 0) / maxScore;
+    const winShare = (Number(p.wins) || 0) / maxWins;
+    const performance = 0.85 + scoreShare * 0.45 + winShare * 0.2;
+    deltas[p.id] = Math.round((K_FACTOR * sum * performance) / (players.length - 1));
   }
   return deltas;
 }
@@ -237,7 +273,7 @@ function makePlayer(id, userId, name, rating) {
     roundBreakdown: null,
     focusLosses: 0, focusLossEvents: [], focusLossPendingUntil: 0,
     focusAppealUsed: false, focusLossForfeited: false,
-    cheatActive: false,
+    cheatActive: false, lastHintAt: 0,
   };
 }
 
@@ -378,10 +414,7 @@ function startSmallRound(store, room, emit) {
   room.modifier = modifier;
   const effective = Number(room.maxGuesses) + Number(modifier.guess_delta || 0);
   room.roundMaxGuesses = Math.max(1, Math.min(MAX_GUESSES_LIMIT, effective));
-  const pool = poolCharacters(room.pool);
-  const recent = new Set((room.recentTargets || []).slice(-3));
-  const candidates = pool.filter((c) => !recent.has(c.name));
-  const target = (candidates.length ? candidates : pool)[Math.floor(Math.random() * (candidates.length || pool.length))];
+  const target = pickTarget(room);
   room.target = target;
   room.recentTargets = [...(room.recentTargets || []), target.name].slice(-8);
   room.state = 'playing';
@@ -717,6 +750,9 @@ export async function performAction(context, msg) {
 
   if (type === 'hint') {
     if (room.state !== 'playing' || player.done || player.focusLossPendingUntil) return { ok: false, silent: true };
+    const now = Date.now();
+    if (now - Number(player.lastHintAt || 0) < 700) return { ok: false, silent: true };
+    player.lastHintAt = now;
     const cheat = !!player.cheatActive;
     if (!cheat && (!room.hintsEnabled || player.hintsLeft <= 0)) return { ok: false, silent: true };
     const revealed = new Set(player.hintLog);
@@ -730,7 +766,7 @@ export async function performAction(context, msg) {
     if (cheat) {
       if (!revealed.has(key)) player.hintLog.push(key);
     } else {
-      player.hintsLeft -= 1;
+      player.hintsLeft = Math.max(0, player.hintsLeft - 1);
       player.roundHints += 1;
       player.hintsUsedTotal += 1;
       player.hintLog.push(key);

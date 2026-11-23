@@ -1,7 +1,7 @@
 export const SERVER_VERSION = '3.0';
 export const STARTING_RATING = 1500;
 export const MIN_RATING = 100;
-export const K_FACTOR = 32;
+export const K_FACTOR = 52;
 export const MAX_MATCH_ROUNDS = 20;
 export const MAX_PLAYERS = 8;
 export const HINT_SCORE_COST = 20;

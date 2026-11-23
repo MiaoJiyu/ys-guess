@@ -109,6 +109,7 @@ try {
   assert(hintEvent.directReveal && hintEvent.answerName, '未触发直出答案');
   assert(hintEvent.hintsLeft === 0, '无限星辉不应改变星辉计数');
 
+  await sleep(750);
   const secondHint = await request('/api/action', {
     method: 'POST', headers: auth(user.token, userSid), body: JSON.stringify({ type: 'hint' }),
   });
@@ -128,6 +129,7 @@ try {
   let me = room.players.find((player) => player.id === userSid);
   assert(me.cheatActive, '外挂状态未跨小局保留');
 
+  await sleep(750);
   const reveal2 = await request('/api/action', {
     method: 'POST', headers: auth(user.token, userSid), body: JSON.stringify({ type: 'hint' }),
   });

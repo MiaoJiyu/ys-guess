@@ -81,7 +81,18 @@ try {
   });
   assert(started.events.some((item) => item.event.type === 'game_start'), '未开始游戏');
 
+  const firstHint = await request('/api/action', {
+    method: 'POST', headers: headers(admin.token, sidA), body: JSON.stringify({ type: 'hint' }),
+  });
+  assert(firstHint.ok, '首次元素视野应成功');
+  const rapidHint = await fetch(`${base}/api/action`, {
+    method: 'POST', headers: headers(admin.token, sidA), body: JSON.stringify({ type: 'hint' }),
+  }).then((response) => response.json());
+  assert(rapidHint.ok === false, '元素视野点击间隔限制未生效');
+
   const state = await request('/api/bootstrap', { headers: headers(admin.token, sidA) });
+  const characters = state.events.find((event) => event.type === 'characters');
+  assert(characters.list.filter((character) => character.avatar).length >= 100, '角色头像数据下发不足');
   const roomUpdate = state.events.find((event) => event.type === 'room_update');
   assert(roomUpdate && roomUpdate.players.length === 2, '房间玩家数异常');
   assert(!roomUpdate.leaderboard.some((entry) => entry.name === '测试房主') === false, '排行榜缺少测试玩家');
