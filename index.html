@@ -1597,7 +1597,7 @@ const state = {
   roundOver: true, clockOffset: 0, soundOn: true,
   codex: { q: "", element: "全部", region: "全部", weapon: "全部", rarity: "全部", focus: null },
   adminPwd: "", currentResult: null, reconnectTimer: null,
-  feed: [], lastRoundKey: null, panel: "lobby"
+  feed: [], lastRoundKey: null, panel: "lobby", lastResultKey: null
 };
 
 /* ============================================================
@@ -1944,6 +1944,45 @@ function handleRoomUpdate(msg) {
   state.currentCols = msg.enabledCols;
   updateProfile();
   if (state.panel === "feedback") return;
+  if (msg.state === "round_ended") {
+    const key = `${msg.code}:${msg.currentMatchRound}:round:${msg.lastGameEnd?.reason || ""}`;
+    if (msg.lastGameEnd && state.lastResultKey !== key) {
+      renderRoundResult(msg.lastGameEnd);
+    } else if (!msg.lastGameEnd && state.panel !== "result") {
+      state.roundOver = true;
+      showPanel("result");
+      $("resultEyebrow").textContent = "ROUND ENDED";
+      $("resultTitle").textContent = "本局已结束";
+      $("resultSub").textContent = "结算数据暂不可用，请等待房主开启下一局。";
+      $("answerCard").innerHTML = "";
+      $("podium").innerHTML = "";
+      $("rankingList").innerHTML = '<div class="lb-empty">结算数据正在同步</div>';
+      $("nextBtn").classList.add("hidden");
+      $("rematchBtn").classList.add("hidden");
+      $("waitHostTip").classList.remove("hidden");
+      $("waitHostTip").textContent = "等待房主开启下一局…";
+    }
+    return;
+  }
+  if (msg.state === "match_ended") {
+    if (msg.lastMatchEnd && state.lastResultKey !== `${msg.code}:match`) {
+      renderMatchResult(msg.lastMatchEnd);
+    } else if (!msg.lastMatchEnd && state.panel !== "result") {
+      state.roundOver = true;
+      showPanel("result");
+      $("resultEyebrow").textContent = "MATCH ENDED";
+      $("resultTitle").textContent = "大场已结束";
+      $("resultSub").textContent = "结算数据暂不可用，请返回房间或重新加入。";
+      $("answerCard").innerHTML = "";
+      $("podium").innerHTML = "";
+      $("rankingList").innerHTML = '<div class="lb-empty">结算数据正在同步</div>';
+      $("nextBtn").classList.add("hidden");
+      $("rematchBtn").classList.add("hidden");
+      $("waitHostTip").classList.remove("hidden");
+      $("waitHostTip").textContent = "等待房主返回房间…";
+    }
+    return;
+  }
   if (msg.state === "waiting") {
     showPanel("wait");
     renderWait();
@@ -2736,6 +2775,7 @@ function rankingHTML(list, mode) {
 function renderRoundResult(msg) {
   state.roundOver = true;
   state.currentResult = msg;
+  state.lastResultKey = `${state.room?.code || msg.code || ""}:${msg.currentMatchRound}:round:${msg.reason || ""}`;
   if (state.room) {
     state.room.state = "round_ended";
     state.room.currentMatchRound = msg.currentMatchRound;
@@ -2799,6 +2839,7 @@ function renderMvpCard(entry) {
 function renderMatchResult(msg) {
   state.roundOver = true;
   state.currentResult = msg;
+  state.lastResultKey = `${state.room?.code || msg.code || ""}:match`;
   if (state.room) {
     state.room.state = "match_ended";
     state.room.roundDeadline = 0;

@@ -15,7 +15,7 @@
     "package:lan": "node scripts/package-lan.mjs",
     "package:all": "npm run package && npm run package:lan",
     "check": "node scripts/check-inline.mjs && node --check server.js && node --check makers.js",
-    "test": "npm run build && node scripts/algorithm-test.mjs && node scripts/smoke-test.mjs && node scripts/blob-smoke.mjs && node scripts/focus-test.mjs && node scripts/feedback-test.mjs && node scripts/security-test.mjs && node scripts/cheat-test.mjs && node scripts/invite-test.mjs && node scripts/lan-package-test.mjs"
+    "test": "npm run build && node scripts/algorithm-test.mjs && node scripts/smoke-test.mjs && node scripts/blob-smoke.mjs && node scripts/focus-test.mjs && node scripts/feedback-test.mjs && node scripts/security-test.mjs && node scripts/cheat-test.mjs && node scripts/invite-test.mjs && node scripts/recovery-test.mjs && node scripts/lan-package-test.mjs"
   },
   "engines": {
     "node": ">=20"

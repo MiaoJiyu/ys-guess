@@ -207,6 +207,8 @@ export function roomPayload(room, viewerId, leaderboard = []) {
     visibility: room.visibility,
     focusLossLimit: FOCUS_LOSS_LIMIT,
     focusGraceSeconds: FOCUS_GRACE_SECONDS,
+    lastGameEnd: room.lastGameEnd || null,
+    lastMatchEnd: room.lastMatchEnd || null,
     serverTime: Date.now() / 1000,
     version: SERVER_VERSION,
     leaderboard,
@@ -298,6 +300,8 @@ function resetPlayer(p, hintsPerMatch) {
 function resetMatch(room) {
   room.currentMatchRound = 0;
   room.matchSettled = false;
+  room.lastGameEnd = null;
+  room.lastMatchEnd = null;
   room.history = [];
   room.winCounter = 0;
   room.roundDeadline = 0;
@@ -363,12 +367,14 @@ function finishRound(store, room, reason, emit) {
     reason,
   });
   room.history = room.history.slice(-MAX_MATCH_ROUNDS);
-  emit(`room:${room.code}`, {
-    type: 'game_end', target, ranking, enabledCols: room.enabledCols,
+  const payload = {
+    type: 'game_end', code: room.code, target, ranking, enabledCols: room.enabledCols,
     currentMatchRound: room.currentMatchRound, matchRounds: room.matchRounds,
     reason, modifier: room.modifier, doubleFinal: room.doubleFinal,
     serverTime: Date.now() / 1000,
-  });
+  };
+  room.lastGameEnd = payload;
+  emit(`room:${room.code}`, payload);
   emit(`room:${room.code}`, roomPayload(room, null));
 }
 
@@ -400,10 +406,12 @@ async function finishMatch(store, room, emit) {
       oldRating: rr.oldRating ?? p.rating, newRating: rr.newRating ?? p.rating, delta: rr.delta ?? 0,
     };
   }).sort((a, b) => b.wins - a.wins || b.totalScore - a.totalScore);
-  emit(`room:${room.code}`, {
-    type: 'match_end', finalRanking, matchRounds: room.matchRounds,
+  const payload = {
+    type: 'match_end', code: room.code, finalRanking, matchRounds: room.matchRounds,
     history: room.history, mvp: finalRanking[0]?.name || null,
-  });
+  };
+  room.lastMatchEnd = payload;
+  emit(`room:${room.code}`, payload);
   emit('global', { type: 'leaderboard', list: await getLeaderboard(store) });
   emit(`room:${room.code}`, roomPayload(room, null));
 }
@@ -419,6 +427,8 @@ function startSmallRound(store, room, emit) {
   room.recentTargets = [...(room.recentTargets || []), target.name].slice(-8);
   room.state = 'playing';
   room.winCounter = 0;
+  room.lastGameEnd = null;
+  room.lastMatchEnd = null;
   room.roundDeadline = room.timeLimit > 0 ? Date.now() / 1000 + room.timeLimit : 0;
   for (const p of Object.values(room.players)) {
     p.guesses = []; p.guessCells = []; p.done = false; p.winOrder = null;
