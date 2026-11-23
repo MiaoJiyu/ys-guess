@@ -1237,6 +1237,17 @@
         </a>
       </div>
 
+      <div class="lan-cloud-note glass hidden" id="lanCloudNotice">
+        <div>
+          <b>当前是云端网页，无法直接扫描本地局域网</b>
+          <p>浏览器不能在公网 HTTPS 页面中发送局域网 UDP 广播。请让房主运行一键启动包，然后在同一局域网打开房主的本地地址，例如 <code>http://192.168.1.20:8787</code>，从那里的“局域网房间”页签进入。</p>
+        </div>
+        <div class="lan-address-row">
+          <input id="lanAddressInput" placeholder="例如 192.168.1.20:8787" autocomplete="off">
+          <button class="btn btn-gold btn-small" id="openLanAddressBtn">打开本地局域网页面</button>
+        </div>
+      </div>
+
       <div class="hub-foot glass">
         <div><b>公网模式</b><span>由 EdgeOne Makers 提供，账号登录后创建或加入，必须输入 6 位房间号与房间密码。</span></div>
         <div><b>局域网模式</b><span>在本机运行 <code>npm start</code>，同一局域网打开 <code>http://本机IP:8787</code> 即可自动发现并免密进入。</span></div>

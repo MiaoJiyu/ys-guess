@@ -169,6 +169,32 @@
     });
   }
 
+  function isLocalPage() {
+    const host = location.hostname.toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '[::1]'
+      || host.endsWith('.local')
+      || /^10\./.test(host) || /^192\.168\./.test(host)
+      || /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+  }
+
+  function openLanAddress() {
+    const raw = $('lanAddressInput').value.trim();
+    if (!raw) { toast('请输入房主的局域网地址', true); return; }
+    let url;
+    try {
+      url = new URL(/^[a-z]+:\/\//i.test(raw) ? raw : `http://${raw}`);
+    } catch {
+      toast('地址格式不正确', true);
+      return;
+    }
+    const host = url.hostname.toLowerCase();
+    const allowed = host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local')
+      || /^10\./.test(host) || /^192\.168\./.test(host)
+      || /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+    if (!allowed) { toast('仅支持局域网或 localhost 地址', true); return; }
+    window.open(url.href, '_blank', 'noopener');
+  }
+
   function renderHubRooms() {
     const publicList = (state.rooms || []).filter((room) => room.visibility !== 'lan');
     const lanList = state.lanRooms || [];
@@ -193,6 +219,8 @@
         $('lanDownloadMeta').textContent = 'GitHub Release 最新版 · 经 gh-proxy 加速下载 · ZIP 解压后双击启动';
       }
     }
+    const cloudNotice = $('lanCloudNotice');
+    if (cloudNotice) cloudNotice.classList.toggle('hidden', !(state.hubTab === 'lan' && !isLocalPage()));
   }
 
   async function loadRooms() {
@@ -801,6 +829,10 @@
     $('hubCreateBtn').onclick = openCreate;
     $('hubJoinBtn').onclick = () => openJoin('');
     $('hubRefreshBtn').onclick = loadRooms;
+    const openLan = $('openLanAddressBtn');
+    if (openLan) openLan.onclick = openLanAddress;
+    const lanInput = $('lanAddressInput');
+    if (lanInput) lanInput.addEventListener('keydown', (event) => { if (event.key === 'Enter') openLanAddress(); });
     const appeal = $('focusAppealBtn');
     if (appeal) appeal.onclick = appealFocusLoss;
     const cheat = $('cheatBtn');
