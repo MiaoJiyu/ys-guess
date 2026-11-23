@@ -9,7 +9,7 @@ const shareStage = path.join(release, 'lan-share');
 const shareZip = path.join(release, 'teyvat-lan-host-share.zip');
 const finalZip = path.join(release, 'teyvat-lan-host.zip');
 
-const baseFiles = ['index.html', 'makers.css', 'makers.js', 'server.js', 'players.json'];
+const baseFiles = ['index.html', 'app.css', 'game.js', 'makers.css', 'makers.js', 'server.js', 'players.json'];
 const baseDirs = ['shared', 'assets'];
 
 function copyBase(stage) {

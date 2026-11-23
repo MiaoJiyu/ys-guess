@@ -5,9 +5,10 @@ import dgram from 'node:dgram';
 import crypto from 'node:crypto';
 import os from 'node:os';
 import net from 'node:net';
+import zlib from 'node:zlib';
 import { handleApi } from './shared/api.js';
 import { appendEvent, createStore } from './shared/store.js';
-import { performAction, roomPayload } from './shared/engine.js';
+import { listRooms, performAction, roomPayload } from './shared/engine.js';
 import { getUser } from './shared/user-store.js';
 import { verifyToken, randomId } from './shared/crypto.js';
 import { credentialStatus, credentialsFromEnv } from './shared/tencent.js';
@@ -131,9 +132,21 @@ async function seedLegacy() {
 const staticFiles = new Map([
   ['/', 'index.html'],
   ['/index.html', 'index.html'],
+  ['/app.css', 'app.css'],
+  ['/game.js', 'game.js'],
   ['/makers.css', 'makers.css'],
   ['/makers.js', 'makers.js'],
 ]);
+const staticCache = new Map();
+
+function readStatic(file) {
+  if (staticCache.has(file)) return staticCache.get(file);
+  const content = fs.readFileSync(path.join(root, file));
+  const compressible = /\.(html|css|js|json|svg)$/i.test(file);
+  const entry = { content, gzip: compressible ? zlib.gzipSync(content) : null };
+  staticCache.set(file, entry);
+  return entry;
+}
 
 const mime = {
   '.html': 'text/html; charset=utf-8',
@@ -165,22 +178,45 @@ const udp = dgram.createSocket('udp4');
 const pendingDiscoveries = new Map();
 let lanReady = false;
 
-udp.on('message', (message, remote) => {
+udp.on('message', async (message, remote) => {
   const text = message.toString('utf8');
   if (!text.includes('TEYVAT_DISCOVERY_V1')) return;
-  const reply = JSON.stringify({
-    protocol: 'TEYVAT_DISCOVERY_V1',
-    httpPort: lanPort,
-    version: SERVER_VERSION,
-    time: Date.now(),
-  });
-  udp.send(reply, remote.port, remote.address, () => {});
+  try {
+    const rooms = (await listRooms(store))
+      .filter((room) => room.visibility === 'lan')
+      .slice(0, 6)
+      .map((room) => ({
+        code: room.code,
+        hostName: room.hostName,
+        playerCount: Object.keys(room.players).length,
+        maxPlayers: 8,
+        state: room.state,
+        pool: room.pool,
+        matchRounds: room.matchRounds,
+      }));
+    const reply = JSON.stringify({
+      protocol: 'TEYVAT_DISCOVERY_V1',
+      httpPort: lanPort,
+      version: SERVER_VERSION,
+      rooms,
+      time: Date.now(),
+    });
+    udp.send(reply, remote.port, remote.address, () => {});
+  } catch (error) {
+    logLine('WARN', `UDP 响应构建失败：${error.message}`);
+  }
+
   try {
     const data = JSON.parse(text);
     if (data.protocol !== 'TEYVAT_DISCOVERY_V1' || !data.httpPort) return;
+    const selfAddresses = new Set(['127.0.0.1', ...getLanAddresses()]);
+    if (selfAddresses.has(remote.address) && Number(data.httpPort) === lanPort) return;
     for (const found of pendingDiscoveries.values()) {
       found.set(`${remote.address}:${data.httpPort}`, {
-        ip: remote.address, httpPort: Number(data.httpPort), version: data.version,
+        ip: remote.address,
+        httpPort: Number(data.httpPort),
+        version: data.version,
+        rooms: Array.isArray(data.rooms) ? data.rooms : [],
       });
     }
   } catch { /* 查询报文无需解析 */ }
@@ -255,9 +291,20 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/favicon.ico') { res.writeHead(204); res.end(); return; }
   const file = staticFiles.get(url.pathname);
   if (!file || !fs.existsSync(path.join(root, file))) { res.writeHead(404); res.end('Not found'); return; }
-  const content = fs.readFileSync(path.join(root, file));
-  res.writeHead(200, { 'Content-Type': mime[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
-  res.end(content);
+  const cached = readStatic(file);
+  const acceptsGzip = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
+  const cache = ['/app.css', '/game.js', '/makers.css', '/makers.js'].includes(url.pathname)
+    ? 'public, max-age=3600'
+    : 'no-store';
+  const headers = {
+    'Content-Type': mime[path.extname(file)] || 'application/octet-stream',
+    'Cache-Control': cache,
+    Vary: 'Accept-Encoding',
+    'Content-Length': String((acceptsGzip && cached.gzip ? cached.gzip : cached.content).length),
+  };
+  if (acceptsGzip && cached.gzip) headers['Content-Encoding'] = 'gzip';
+  res.writeHead(200, headers);
+  res.end(acceptsGzip && cached.gzip ? cached.gzip : cached.content);
 });
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';

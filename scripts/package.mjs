@@ -25,7 +25,7 @@ for (const name of forbidden) {
 }
 
 const required = [
-  'index.html', 'makers.css', 'makers.js', 'package.json',
+  'index.html', 'app.css', 'game.js', 'makers.css', 'makers.js', 'package.json',
   'cloud-functions/api/[[default]].js', 'shared/api.js', 'shared/store.js',
 ];
 for (const file of required) {

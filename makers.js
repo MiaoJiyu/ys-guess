@@ -138,8 +138,12 @@
 
   function roomCard(room, type) {
     const isLan = type === 'lan';
+    const remote = !!(isLan && room.remote);
     const status = room.state === 'waiting' ? '等待中' : room.state === 'playing' ? '对局中' : '已结束';
-    const badge = isLan ? '<span class="room-badge lan">局域网 · 免密</span>' : '<span class="room-badge public">公网 · 需密码</span>';
+    const badge = isLan
+      ? `<span class="room-badge lan">局域网 · ${remote ? '其他房主' : '免密'}</span>`
+      : '<span class="room-badge public">公网 · 需密码</span>';
+    const server = remote ? `${room.serverAddress}:${room.serverPort}` : '';
     return `<article class="room-card">
       <div class="room-top"><span class="room-code">${esc(room.code)}</span>${badge}</div>
       <div class="room-meta">
@@ -148,8 +152,9 @@
         <span>${esc(room.pool || '全部')}</span>
         <span>${Number(room.matchRounds) || 3} 局</span>
         <span>${esc(status)}</span>
+        ${server ? `<span>${esc(server)}</span>` : ''}
       </div>
-      <button class="btn btn-gold" data-enter="${esc(room.code)}" data-type="${type}">${isLan ? '免密进入' : '输入密码进入'}</button>
+      <button class="btn btn-gold" data-enter="${esc(room.code)}" data-server="${esc(server)}" data-type="${type}">${remote ? '打开房主页面' : isLan ? '免密进入' : '输入密码进入'}</button>
     </article>`;
   }
 
@@ -157,10 +162,15 @@
     root.querySelectorAll('[data-enter]').forEach((button) => {
       button.onclick = () => {
         const code = button.dataset.enter;
+        const server = button.dataset.server || '';
         if (type === 'lan') {
           const rooms = state.lanRooms || [];
-          const room = rooms.find((item) => item.code === code);
+          const room = rooms.find((item) => item.code === code && (item.serverAddress ? `${item.serverAddress}:${item.serverPort}` : '') === server);
           if (!room) { toast('房间已消失，请刷新大厅', true); return; }
+          if (room.remote) {
+            window.open(`http://${room.serverAddress}:${room.serverPort}`, '_blank', 'noopener');
+            return;
+          }
           enterLanRoom(room);
         } else {
           openJoin(code);
@@ -235,8 +245,20 @@
       const { data } = await api('/api/lan/discover');
       const rooms = data.rooms || [];
       for (const peer of data.peers || []) {
-        if (!rooms.some((room) => room.serverAddress === peer.ip)) {
-          rooms.push({ code: '局域网服务', visibility: 'lan', hostName: peer.ip, playerCount: 0, maxPlayers: 8, state: 'waiting', pool: '全部', matchRounds: 3, lanToken: '', serverAddress: peer.ip, serverPort: peer.httpPort });
+        for (const peerRoom of peer.rooms || []) {
+          const duplicate = rooms.some((room) =>
+            room.serverAddress === peer.ip
+            && Number(room.serverPort) === Number(peer.httpPort)
+            && room.code === peerRoom.code);
+          if (duplicate) continue;
+          rooms.push({
+            ...peerRoom,
+            visibility: 'lan',
+            lanToken: '',
+            serverAddress: peer.ip,
+            serverPort: Number(peer.httpPort),
+            remote: true,
+          });
         }
       }
       state.lanRooms = rooms;
@@ -788,7 +810,9 @@
   window.addEventListener('teyvat-hub-open', renderFocusAlert);
   window.addEventListener('teyvat-left-room', renderFocusAlert);
   window.addEventListener('teyvat-feedback-open', () => loadFeedbackPanel());
-  setInterval(renderFocusAlert, 500);
+  setInterval(() => {
+    if (state.room && state.room.state === 'playing') renderFocusAlert();
+  }, 1000);
 
   window.__TEYVAT_ADMIN__ = openAdminConsole;
 

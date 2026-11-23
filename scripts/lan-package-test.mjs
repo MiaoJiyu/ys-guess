@@ -48,14 +48,29 @@ try {
   }).then((response) => response.json());
   if (!register.ok) throw new Error(`局域网注册失败：${register.error}`);
 
+  const assets = await Promise.all(['app.css', 'game.js'].map(async (name) => {
+    const response = await fetch(`http://127.0.0.1:${port}/${name}`);
+    return response.ok && (await response.text()).length > 100;
+  }));
+  if (assets.some((ok) => !ok)) throw new Error('局域网启动包缺少外置首屏资源');
+
   const avatar = await fetch(`http://127.0.0.1:${port}/assets/avatars/UI_AvatarIcon_Keqing.png`);
   const avatarBytes = new Uint8Array(await avatar.arrayBuffer());
   if (avatar.status !== 200 || avatarBytes[0] !== 0x89 || avatarBytes[1] !== 0x50) {
     throw new Error('局域网启动包未正确提供本地角色头像');
   }
 
-  const headers = { Authorization: `Bearer ${register.token}`, 'X-Session-Id': `lan-${suffix}` };
+  const headers = { Authorization: `Bearer ${register.token}`, 'X-Session-Id': `lan-${suffix}`, 'Content-Type': 'application/json' };
+  const created = await fetch(`http://127.0.0.1:${port}/api/action`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ type: 'create', name: '局域网测试', visibility: 'lan', maxGuesses: 8 }),
+  }).then((response) => response.json());
+  if (!created.ok) throw new Error(`局域网房间创建失败：${created.error}`);
   const discover = await fetch(`http://127.0.0.1:${port}/api/lan/discover`, { headers }).then((response) => response.json());
+  if (!discover.rooms?.some((room) => room.code === created.roomCode && room.lanToken)) {
+    throw new Error('局域网发现接口未返回刚创建的房间');
+  }
   if (!discover.download?.url) throw new Error('局域网接口未返回下载入口');
   const download = await fetch(`http://127.0.0.1:${port}${discover.download.url}`);
   const bytes = new Uint8Array(await download.arrayBuffer());
